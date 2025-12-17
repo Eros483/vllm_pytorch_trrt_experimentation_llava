@@ -1,4 +1,4 @@
-# `tetris`: Memory Aware Scheduling (MAS)
+# `tetris`: Memory Aware Scheduler (MAS)
 To maximize GPU saturation and reduce inference costs, we need to move beyond static batching. The goal is to implement a "Memory-Aware Scheduler" that injects secondary, smaller model executions into the vRAM "valleys" of model inference cycles.
 
 ## License
