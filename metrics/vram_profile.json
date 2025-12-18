@@ -1,0 +1,196 @@
+{
+  "metadata": {
+    "timestamp": "2025-12-18T05:42:46.271112Z",
+    "precision": "FP16",
+    "units": "MB"
+  },
+  "static_components": {
+    "model_weights": 13472.42333984375
+  },
+  "dynamic_components": {
+    "cpu_to_gpu_transfer": 0.65576171875,
+    "vision_encoder": {
+      "net": 10.251953125,
+      "peak": 53.248046875
+    },
+    "projection_layer": {
+      "net": 4.5078125,
+      "peak": 9.015625
+    },
+    "text_embedding": {
+      "net": 4.6328125,
+      "peak": 4.6328125
+    },
+    "embedding_fusion": {
+      "net": 10.017578125,
+      "peak": 10.017578125
+    },
+    "llm_prefill": {
+      "net": 338.9931640625,
+      "peak": 359.10888671875
+    }
+  },
+  "kv_cache": {
+    "initial": 296.5,
+    "final": 309.0,
+    "avg_growth_per_token": 0.5,
+    "total_growth_25_tokens": 12.5,
+    "per_token_trace": [
+      {
+        "step": 1,
+        "kv_cache": 297.0,
+        "growth": 0.5,
+        "total": 13801.28564453125
+      },
+      {
+        "step": 2,
+        "kv_cache": 297.5,
+        "growth": 0.5,
+        "total": 13801.06689453125
+      },
+      {
+        "step": 3,
+        "kv_cache": 298.0,
+        "growth": 0.5,
+        "total": 13801.05908203125
+      },
+      {
+        "step": 4,
+        "kv_cache": 298.5,
+        "growth": 0.5,
+        "total": 13801.18408203125
+      },
+      {
+        "step": 5,
+        "kv_cache": 299.0,
+        "growth": 0.5,
+        "total": 13801.55126953125
+      },
+      {
+        "step": 6,
+        "kv_cache": 299.5,
+        "growth": 0.5,
+        "total": 13802.05126953125
+      },
+      {
+        "step": 7,
+        "kv_cache": 300.0,
+        "growth": 0.5,
+        "total": 13802.55126953125
+      },
+      {
+        "step": 8,
+        "kv_cache": 300.5,
+        "growth": 0.5,
+        "total": 13803.05126953125
+      },
+      {
+        "step": 9,
+        "kv_cache": 301.0,
+        "growth": 0.5,
+        "total": 13803.55126953125
+      },
+      {
+        "step": 10,
+        "kv_cache": 301.5,
+        "growth": 0.5,
+        "total": 13804.05126953125
+      },
+      {
+        "step": 11,
+        "kv_cache": 302.0,
+        "growth": 0.5,
+        "total": 13804.55126953125
+      },
+      {
+        "step": 12,
+        "kv_cache": 302.5,
+        "growth": 0.5,
+        "total": 13805.05126953125
+      },
+      {
+        "step": 13,
+        "kv_cache": 303.0,
+        "growth": 0.5,
+        "total": 13805.55126953125
+      },
+      {
+        "step": 14,
+        "kv_cache": 303.5,
+        "growth": 0.5,
+        "total": 13806.05126953125
+      },
+      {
+        "step": 15,
+        "kv_cache": 304.0,
+        "growth": 0.5,
+        "total": 13815.55126953125
+      },
+      {
+        "step": 16,
+        "kv_cache": 304.5,
+        "growth": 0.5,
+        "total": 13816.73876953125
+      },
+      {
+        "step": 17,
+        "kv_cache": 305.0,
+        "growth": 0.5,
+        "total": 13816.93408203125
+      },
+      {
+        "step": 18,
+        "kv_cache": 305.5,
+        "growth": 0.5,
+        "total": 13818.03564453125
+      },
+      {
+        "step": 19,
+        "kv_cache": 306.0,
+        "growth": 0.5,
+        "total": 13817.30126953125
+      },
+      {
+        "step": 20,
+        "kv_cache": 306.5,
+        "growth": 0.5,
+        "total": 13818.34814453125
+      },
+      {
+        "step": 21,
+        "kv_cache": 307.0,
+        "growth": 0.5,
+        "total": 13818.48876953125
+      },
+      {
+        "step": 22,
+        "kv_cache": 307.5,
+        "growth": 0.5,
+        "total": 13818.64501953125
+      },
+      {
+        "step": 23,
+        "kv_cache": 308.0,
+        "growth": 0.5,
+        "total": 13818.05126953125
+      },
+      {
+        "step": 24,
+        "kv_cache": 308.5,
+        "growth": 0.5,
+        "total": 13818.98095703125
+      },
+      {
+        "step": 25,
+        "kv_cache": 309.0,
+        "growth": 0.5,
+        "total": 13819.12158203125
+      }
+    ]
+  },
+  "aggregates": {
+    "total_inference_net_retained": 369.05908203125,
+    "highest_single_phase_peak": 359.10888671875,
+    "final_peak_gpu_memory": 13819.12158203125
+  }
+}
