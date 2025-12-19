@@ -1,3 +1,5 @@
 transformers
 matplotlib
 accelerate
+pandas
+scikit-learn
