@@ -30,7 +30,6 @@ class BaselineLlava:
         """
         Standard synchronous generation - does everything sequentially.
         """
-        # Format prompt
         formatted_prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
 
         inputs = self.processor(
