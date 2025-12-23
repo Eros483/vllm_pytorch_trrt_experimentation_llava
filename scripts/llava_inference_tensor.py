@@ -6,42 +6,46 @@ import time
 import json
 import GPUtil
 from datetime import datetime
+
+TENSORRTLLM_BACKEND = "/tensorrtllm_backend"
+sys.path.insert(0, f'{TENSORRTLLM_BACKEND}/tensorrt_llm/examples/models/core/multimodal')
+
 from utils import add_common_args
 from tensorrt_llm.runtime import MultimodalModelRunner
 
-BATCH_SIZE = 1
-MAX_INPUT_LEN = 2048
-MAX_OUTPUT_LEN = 512
-MAX_NEW_TOKENS = 50
+BUILD_CONFIG = {
+    "model_path": "/llava-1.5-7b-hf",
+    "engine_dir": "/engines/llava1.5",
+    "backend_path": TENSORRTLLM_BACKEND,
+    "max_batch_size": 4, 
+    "max_input_len": 2048,
+    "max_output_len": 512,
+    "max_multimodal_len": 2304, #ensure multplying max length for one batch with number of batches
+    "dtype": "float16"
+}
 
-IMAGES = [
-    'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png'
-]
-
-PROMPTS = [
-    'Describe this image in detail.'
-]
-
-MODEL_PATH = "/llava-1.5-7b-hf"
-ENGINE_DIR = "/engines/llava1.5"
-TENSORRTLLM_BACKEND = "/tensorrtllm_backend"
-
-
-sys.path.insert(0, f'{TENSORRTLLM_BACKEND}/tensorrt_llm/examples/models/core/multimodal')
+INFERENCE_CONFIG = {
+    "batch_size": 4,  # Process 4 images at once
+    "max_new_tokens": 50,
+    "images": [
+        'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png',
+    ],
+    "prompts": [
+        'Describe this image in detail.',
+    ]
+}
 
 class LlavaEngineBuilder:
-    def __init__(self, model_path, engine_dir, backend_path, batch_size, max_input_len, max_output_len):
-        self.model_path = model_path
-        self.engine_dir = engine_dir
-        self.backend_path = backend_path
-        self.batch_size = batch_size
-        self.max_input_len = max_input_len
-        self.max_output_len = max_output_len
+    def __init__(self, config):
+        self.config = config
+        self.model_path = config["model_path"]
+        self.engine_dir = config["engine_dir"]
+        self.backend_path = config["backend_path"]
         
-        self.llama_dir = f"{backend_path}/tensorrt_llm/examples/models/core/llama"
+        self.llama_dir = f"{self.backend_path}/tensorrt_llm/examples/models/core/llama"
         self.checkpoint_dir = "/tmp/trt_models/llava/fp16/1-gpu"
-        self.engine_llm_dir = f"{engine_dir}/llm"
-        self.engine_vision_dir = f"{engine_dir}/vision"
+        self.engine_llm_dir = f"{self.engine_dir}/llm"
+        self.engine_vision_dir = f"{self.engine_dir}/vision"
         
     def needs_rebuild(self):
         """
@@ -60,17 +64,20 @@ class LlavaEngineBuilder:
             with open(config_file, 'r') as f:
                 old_config = json.load(f)
             
-            current_config = {
-                "batch_size": self.batch_size,
-                "max_input_len": self.max_input_len,
-                "max_output_len": self.max_output_len,
-                "model_path": self.model_path
+            current_params = {
+                "max_batch_size": self.config["max_batch_size"],
+                "max_input_len": self.config["max_input_len"],
+                "max_output_len": self.config["max_output_len"],
+                "max_multimodal_len": self.config["max_multimodal_len"],
+                "model_path": self.config["model_path"]
             }
             
-            if old_config != current_config:
+            old_params = {k: old_config.get(k) for k in current_params}
+            
+            if old_params != current_params:
                 print("→ Configuration changed, rebuild required")
-                print(f"   Old: {old_config}")
-                print(f"   New: {current_config}")
+                print(f"   Old: {old_params}")
+                print(f"   New: {current_params}")
                 return True
         else:
             print("No build config found, build required\n")
@@ -83,17 +90,12 @@ class LlavaEngineBuilder:
         """
         Save build configuration
         """
-        config = {
-            "batch_size": self.batch_size,
-            "max_input_len": self.max_input_len,
-            "max_output_len": self.max_output_len,
-            "model_path": self.model_path,
-            "build_time": datetime.now().isoformat()
-        }
+        save_data = self.config.copy()
+        save_data["build_time"] = datetime.now().isoformat()
         
         os.makedirs(self.engine_dir, exist_ok=True)
         with open(f"{self.engine_dir}/build_config.json", 'w') as f:
-            json.dump(config, f, indent=2)
+            json.dump(save_data, f, indent=2)
     
     def validate_setup(self):
         """
@@ -123,7 +125,7 @@ class LlavaEngineBuilder:
             f"{self.llama_dir}/convert_checkpoint.py",
             "--model_dir", self.model_path,
             "--output_dir", self.checkpoint_dir,
-            "--dtype", "float16"
+            "--dtype", self.config["dtype"]
         ]
 
         subprocess.run(convert_cmd, check=True)
@@ -139,12 +141,12 @@ class LlavaEngineBuilder:
             "trtllm-build",
             "--checkpoint_dir", self.checkpoint_dir,
             "--output_dir", self.engine_llm_dir,
-            "--gemm_plugin", "float16",
+            "--gemm_plugin", self.config["dtype"],
             "--use_fused_mlp", "enable",
-            "--max_batch_size", str(self.batch_size),
-            "--max_input_len", str(self.max_input_len),
-            "--max_seq_len", str(self.max_input_len + self.max_output_len),
-            "--max_multimodal_len", "576"
+            "--max_batch_size", str(self.config["max_batch_size"]),
+            "--max_input_len", str(self.config["max_input_len"]),
+            "--max_seq_len", str(self.config["max_input_len"] + self.config["max_output_len"]),
+            "--max_multimodal_len", str(self.config["max_multimodal_len"])
         ]
         
         subprocess.run(build_cmd, check=True)
@@ -197,7 +199,7 @@ print("Visual engine build complete!")
             raise
 
 
-def log_vram(stage, log_file="../metrics/tensor_rt_metrics.jsonl"):
+def log_vram(stage, log_file="tensor_rt_metrics.jsonl"):
     """helper to Log VRAM usage"""
     try:
         gpus = GPUtil.getGPUs()
@@ -222,30 +224,32 @@ def log_vram(stage, log_file="../metrics/tensor_rt_metrics.jsonl"):
     return None
 
 
-def run_inference(images, prompts, max_new_tokens):
+def run_inference(build_cfg, infer_cfg):
     """Run inference on images with prompts"""
+    
+    all_images = infer_cfg["images"]
+    all_prompts = infer_cfg["prompts"]
+    batch_size = infer_cfg.get("batch_size", 1)
+    max_new_tokens = infer_cfg["max_new_tokens"]
+
+    if batch_size > build_cfg["max_batch_size"]:
+        raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
 
     print("Running Inference\n")
     
-    # Ensure prompts match images
-    if len(prompts) == 1 and len(images) > 1:
-        prompts = prompts * len(images)
+    if len(all_prompts) == 1 and len(all_images) > 1:
+        all_prompts = all_prompts * len(all_images)
     
     parser = argparse.ArgumentParser()
     parser = add_common_args(parser)
     
     args = parser.parse_args([
         '--max_new_tokens', str(max_new_tokens),
-        '--hf_model_dir', MODEL_PATH,
-        '--engine_dir', ENGINE_DIR,
-        '--image_path', images[0],
-        '--input_text', prompts[0]
+        '--hf_model_dir', build_cfg["model_path"],
+        '--engine_dir', build_cfg["engine_dir"],
+        '--image_path', "", 
+        '--input_text', ""
     ])
-
-    if isinstance(args.input_text, list):
-        args.input_text = ' '.join(args.input_text)
-    if isinstance(args.image_path, list):
-        args.image_path = args.image_path[0]
     
     args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
     args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
@@ -262,41 +266,132 @@ def run_inference(images, prompts, max_new_tokens):
     log_vram("model_loaded")
     
     results = []
-    for idx, (image_path, prompt) in enumerate(zip(images, prompts)):
-        print(f"\nImage: {image_path}")
-        print(f"Prompt: {prompt}\n")
+    
+    total_samples = len(all_images)
+    for i in range(0, total_samples, batch_size):
+        batch_images = all_images[i : i + batch_size]
+        batch_prompts = all_prompts[i : i + batch_size]
+        
+        print(f"\nProcessing batch {i//batch_size + 1} (Images {i+1}-{min(i+batch_size, total_samples)})")
 
-        args.image_path = image_path
-        args.input_text = prompt
+        args.image_path = batch_images if batch_size > 1 else batch_images[0]
+        args.input_text = batch_prompts if batch_size > 1 else batch_prompts[0]
 
         visual_data = model.load_test_image()
-        log_vram(f"image_{idx}_loaded")
+        log_vram(f"batch_{i//batch_size}_loaded")
 
         start_infer = time.time()
-        input_text, output_text = model.run(
+        _, output_text = model.run(
             args.input_text,
             visual_data,
             args.max_new_tokens
         )
         infer_time = (time.time() - start_infer) * 1000
         
-        log_vram(f"image_{idx}_inferred")
+        log_vram(f"batch_{i//batch_size}_inferred")
 
-        if isinstance(output_text, list):
-            response = output_text[0][0] if isinstance(output_text[0], (list, tuple)) else output_text[0]
-        else:
-            response = output_text
+        for j, output in enumerate(output_text):
+            response = output[0] if isinstance(output, list) else output
+            
+            results.append({
+                "image": batch_images[j],
+                "prompt": batch_prompts[j],
+                "response": response,
+                "latency_ms": infer_time 
+            })
+            print(f"  Response [{j}]: {response}")
+
+    print("-" * 50)
+    for idx, result in enumerate(results):
+        print(f"\n[{idx+1}] {result['image']}")
+        print(f"    Prompt: {result['prompt']}")
+        print(f"    Response: {result['response']}")
+        print(f"    Batch Latency: {result['latency_ms']:.0f}ms")
+    
+    print(f"\nProcessed {len(results)} image(s)")
+    print(f"  Avg batch latency: {sum(r['latency_ms'] for r in results)/len(results):.0f}ms")
+    print(f"  Model load time: {load_time:.2f}s")
+    
+    return results
+
+def run_inference_batched(build_cfg, infer_cfg):
+    """Run inference on images with prompts - processes items sequentially"""
+    
+    all_images = infer_cfg["images"]
+    all_prompts = infer_cfg["prompts"]
+    batch_size = infer_cfg.get("batch_size", 1)
+    max_new_tokens = infer_cfg["max_new_tokens"]
+
+    if batch_size > build_cfg["max_batch_size"]:
+        raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
+
+    print("Running Inference\n")
+    
+    if len(all_prompts) == 1 and len(all_images) > 1:
+        all_prompts = all_prompts * len(all_images)
+    
+    parser = argparse.ArgumentParser()
+    parser = add_common_args(parser)
+    
+    args = parser.parse_args([
+        '--max_new_tokens', str(max_new_tokens),
+        '--hf_model_dir', build_cfg["model_path"],
+        '--engine_dir', build_cfg["engine_dir"],
+        '--image_path', "", 
+        '--input_text', ""
+    ])
+    
+    args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
+    args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
+    args.use_py_session = (args.session == 'python')
+    args.use_cpp_session = (args.session == 'cpp')
+    
+    log_vram("baseline")
+
+    print("LOADING MODEL\n")
+    start_load = time.time()
+    model = MultimodalModelRunner(args)
+    load_time = time.time() - start_load
+    print(f"✓ Model loaded in {load_time:.2f}s")
+    log_vram("model_loaded")
+    
+    results = []
+    
+    total_samples = len(all_images)
+    
+    # Process each image individually
+    for i, (image, prompt) in enumerate(zip(all_images, all_prompts)):
+        print(f"\nProcessing image {i+1}/{total_samples}")
+
+        # Pass single values as strings, not lists
+        args.image_path = image
+        args.input_text = prompt
+
+        visual_data = model.load_test_image()
+        log_vram(f"image_{i}_loaded")
+
+        start_infer = time.time()
+        _, output_text = model.run(
+            args.input_text,
+            visual_data,
+            args.max_new_tokens
+        )
+        infer_time = (time.time() - start_infer) * 1000
+        
+        log_vram(f"image_{i}_inferred")
+
+        # Extract response
+        response = output_text[0] if isinstance(output_text, list) else output_text
         
         results.append({
-            "image": image_path,
+            "image": image,
             "prompt": prompt,
             "response": response,
-            "latency_ms": infer_time
+            "latency_ms": infer_time 
         })
-        
-        print(f"\nResponse: {response}")
-        print(f"Latency: {infer_time:.0f}ms")
+        print(f"  Response: {response}")
 
+    print("-" * 50)
     for idx, result in enumerate(results):
         print(f"\n[{idx+1}] {result['image']}")
         print(f"    Prompt: {result['prompt']}")
@@ -309,16 +404,8 @@ def run_inference(images, prompts, max_new_tokens):
     
     return results
 
-
 def main():
-    builder = LlavaEngineBuilder(
-        MODEL_PATH, 
-        ENGINE_DIR, 
-        TENSORRTLLM_BACKEND,
-        BATCH_SIZE,
-        MAX_INPUT_LEN,
-        MAX_OUTPUT_LEN
-    )
+    builder = LlavaEngineBuilder(BUILD_CONFIG)
     
     if builder.needs_rebuild():
         print("\nBuilding engines...")
@@ -326,7 +413,7 @@ def main():
     else:
         print("\nUsing existing engines")
 
-    results = run_inference(IMAGES, PROMPTS, MAX_NEW_TOKENS)
+    results = run_inference_batched(BUILD_CONFIG, INFERENCE_CONFIG)
 
 if __name__ == "__main__":
     main()

@@ -29,6 +29,8 @@ docker run --rm -it --net host --shm-size=2g \
 
 # from inside the container image
 pip install psutil gputil tritonclient[http] pillow requests
+
+cd /workspace
 ```
 
 #### **Engine build and inference**
