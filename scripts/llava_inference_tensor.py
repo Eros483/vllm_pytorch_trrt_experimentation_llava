@@ -224,185 +224,185 @@ def log_vram(stage, log_file="tensor_rt_metrics.jsonl"):
     return None
 
 
-def run_inference(build_cfg, infer_cfg):
-    """Run inference on images with prompts"""
+# def run_inference(build_cfg, infer_cfg):
+#     """Run inference on images with prompts"""
     
-    all_images = infer_cfg["images"]
-    all_prompts = infer_cfg["prompts"]
-    batch_size = infer_cfg.get("batch_size", 1)
-    max_new_tokens = infer_cfg["max_new_tokens"]
+#     all_images = infer_cfg["images"]
+#     all_prompts = infer_cfg["prompts"]
+#     batch_size = infer_cfg.get("batch_size", 1)
+#     max_new_tokens = infer_cfg["max_new_tokens"]
 
-    if batch_size > build_cfg["max_batch_size"]:
-        raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
+#     if batch_size > build_cfg["max_batch_size"]:
+#         raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
 
-    print("Running Inference\n")
+#     print("Running Inference\n")
     
-    if len(all_prompts) == 1 and len(all_images) > 1:
-        all_prompts = all_prompts * len(all_images)
+#     if len(all_prompts) == 1 and len(all_images) > 1:
+#         all_prompts = all_prompts * len(all_images)
     
-    parser = argparse.ArgumentParser()
-    parser = add_common_args(parser)
+#     parser = argparse.ArgumentParser()
+#     parser = add_common_args(parser)
     
-    args = parser.parse_args([
-        '--max_new_tokens', str(max_new_tokens),
-        '--hf_model_dir', build_cfg["model_path"],
-        '--engine_dir', build_cfg["engine_dir"],
-        '--image_path', "", 
-        '--input_text', ""
-    ])
+#     args = parser.parse_args([
+#         '--max_new_tokens', str(max_new_tokens),
+#         '--hf_model_dir', build_cfg["model_path"],
+#         '--engine_dir', build_cfg["engine_dir"],
+#         '--image_path', "", 
+#         '--input_text', ""
+#     ])
     
-    args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
-    args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
-    args.use_py_session = (args.session == 'python')
-    args.use_cpp_session = (args.session == 'cpp')
+#     args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
+#     args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
+#     args.use_py_session = (args.session == 'python')
+#     args.use_cpp_session = (args.session == 'cpp')
     
-    log_vram("baseline")
+#     log_vram("baseline")
 
-    print("LOADING MODEL\n")
-    start_load = time.time()
-    model = MultimodalModelRunner(args)
-    load_time = time.time() - start_load
-    print(f"✓ Model loaded in {load_time:.2f}s")
-    log_vram("model_loaded")
+#     print("LOADING MODEL\n")
+#     start_load = time.time()
+#     model = MultimodalModelRunner(args)
+#     load_time = time.time() - start_load
+#     print(f"✓ Model loaded in {load_time:.2f}s")
+#     log_vram("model_loaded")
     
-    results = []
+#     results = []
     
-    total_samples = len(all_images)
-    for i in range(0, total_samples, batch_size):
-        batch_images = all_images[i : i + batch_size]
-        batch_prompts = all_prompts[i : i + batch_size]
+#     total_samples = len(all_images)
+#     for i in range(0, total_samples, batch_size):
+#         batch_images = all_images[i : i + batch_size]
+#         batch_prompts = all_prompts[i : i + batch_size]
         
-        print(f"\nProcessing batch {i//batch_size + 1} (Images {i+1}-{min(i+batch_size, total_samples)})")
+#         print(f"\nProcessing batch {i//batch_size + 1} (Images {i+1}-{min(i+batch_size, total_samples)})")
 
-        args.image_path = batch_images if batch_size > 1 else batch_images[0]
-        args.input_text = batch_prompts if batch_size > 1 else batch_prompts[0]
+#         args.image_path = batch_images if batch_size > 1 else batch_images[0]
+#         args.input_text = batch_prompts if batch_size > 1 else batch_prompts[0]
 
-        visual_data = model.load_test_image()
-        log_vram(f"batch_{i//batch_size}_loaded")
+#         visual_data = model.load_test_image()
+#         log_vram(f"batch_{i//batch_size}_loaded")
 
-        start_infer = time.time()
-        _, output_text = model.run(
-            args.input_text,
-            visual_data,
-            args.max_new_tokens
-        )
-        infer_time = (time.time() - start_infer) * 1000
+#         start_infer = time.time()
+#         _, output_text = model.run(
+#             args.input_text,
+#             visual_data,
+#             args.max_new_tokens
+#         )
+#         infer_time = (time.time() - start_infer) * 1000
         
-        log_vram(f"batch_{i//batch_size}_inferred")
+#         log_vram(f"batch_{i//batch_size}_inferred")
 
-        for j, output in enumerate(output_text):
-            response = output[0] if isinstance(output, list) else output
+#         for j, output in enumerate(output_text):
+#             response = output[0] if isinstance(output, list) else output
             
-            results.append({
-                "image": batch_images[j],
-                "prompt": batch_prompts[j],
-                "response": response,
-                "latency_ms": infer_time 
-            })
-            print(f"  Response [{j}]: {response}")
+#             results.append({
+#                 "image": batch_images[j],
+#                 "prompt": batch_prompts[j],
+#                 "response": response,
+#                 "latency_ms": infer_time 
+#             })
+#             print(f"  Response [{j}]: {response}")
 
-    print("-" * 50)
-    for idx, result in enumerate(results):
-        print(f"\n[{idx+1}] {result['image']}")
-        print(f"    Prompt: {result['prompt']}")
-        print(f"    Response: {result['response']}")
-        print(f"    Batch Latency: {result['latency_ms']:.0f}ms")
+#     print("-" * 50)
+#     for idx, result in enumerate(results):
+#         print(f"\n[{idx+1}] {result['image']}")
+#         print(f"    Prompt: {result['prompt']}")
+#         print(f"    Response: {result['response']}")
+#         print(f"    Batch Latency: {result['latency_ms']:.0f}ms")
     
-    print(f"\nProcessed {len(results)} image(s)")
-    print(f"  Avg batch latency: {sum(r['latency_ms'] for r in results)/len(results):.0f}ms")
-    print(f"  Model load time: {load_time:.2f}s")
+#     print(f"\nProcessed {len(results)} image(s)")
+#     print(f"  Avg batch latency: {sum(r['latency_ms'] for r in results)/len(results):.0f}ms")
+#     print(f"  Model load time: {load_time:.2f}s")
     
-    return results
+#     return results
 
-def run_inference_batched(build_cfg, infer_cfg):
-    """Run inference on images with prompts - processes items sequentially"""
+# def run_inference_batched(build_cfg, infer_cfg):
+#     """Run inference on images with prompts - processes items sequentially"""
     
-    all_images = infer_cfg["images"]
-    all_prompts = infer_cfg["prompts"]
-    batch_size = infer_cfg.get("batch_size", 1)
-    max_new_tokens = infer_cfg["max_new_tokens"]
+#     all_images = infer_cfg["images"]
+#     all_prompts = infer_cfg["prompts"]
+#     batch_size = infer_cfg.get("batch_size", 1)
+#     max_new_tokens = infer_cfg["max_new_tokens"]
 
-    if batch_size > build_cfg["max_batch_size"]:
-        raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
+#     if batch_size > build_cfg["max_batch_size"]:
+#         raise ValueError(f"Inference batch size ({batch_size}) > engine max_batch_size ({build_cfg['max_batch_size']})")
 
-    print("Running Inference\n")
+#     print("Running Inference\n")
     
-    if len(all_prompts) == 1 and len(all_images) > 1:
-        all_prompts = all_prompts * len(all_images)
+#     if len(all_prompts) == 1 and len(all_images) > 1:
+#         all_prompts = all_prompts * len(all_images)
     
-    parser = argparse.ArgumentParser()
-    parser = add_common_args(parser)
+#     parser = argparse.ArgumentParser()
+#     parser = add_common_args(parser)
     
-    args = parser.parse_args([
-        '--max_new_tokens', str(max_new_tokens),
-        '--hf_model_dir', build_cfg["model_path"],
-        '--engine_dir', build_cfg["engine_dir"],
-        '--image_path', "", 
-        '--input_text', ""
-    ])
+#     args = parser.parse_args([
+#         '--max_new_tokens', str(max_new_tokens),
+#         '--hf_model_dir', build_cfg["model_path"],
+#         '--engine_dir', build_cfg["engine_dir"],
+#         '--image_path', "", 
+#         '--input_text', ""
+#     ])
     
-    args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
-    args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
-    args.use_py_session = (args.session == 'python')
-    args.use_cpp_session = (args.session == 'cpp')
+#     args.visual_engine_dir = os.path.join(args.engine_dir, 'vision')
+#     args.llm_engine_dir = os.path.join(args.engine_dir, 'llm')
+#     args.use_py_session = (args.session == 'python')
+#     args.use_cpp_session = (args.session == 'cpp')
     
-    log_vram("baseline")
+#     log_vram("baseline")
 
-    print("LOADING MODEL\n")
-    start_load = time.time()
-    model = MultimodalModelRunner(args)
-    load_time = time.time() - start_load
-    print(f"✓ Model loaded in {load_time:.2f}s")
-    log_vram("model_loaded")
+#     print("LOADING MODEL\n")
+#     start_load = time.time()
+#     model = MultimodalModelRunner(args)
+#     load_time = time.time() - start_load
+#     print(f"✓ Model loaded in {load_time:.2f}s")
+#     log_vram("model_loaded")
     
-    results = []
+#     results = []
     
-    total_samples = len(all_images)
+#     total_samples = len(all_images)
     
-    # Process each image individually
-    for i, (image, prompt) in enumerate(zip(all_images, all_prompts)):
-        print(f"\nProcessing image {i+1}/{total_samples}")
+#     # Process each image individually
+#     for i, (image, prompt) in enumerate(zip(all_images, all_prompts)):
+#         print(f"\nProcessing image {i+1}/{total_samples}")
 
-        # Pass single values as strings, not lists
-        args.image_path = image
-        args.input_text = prompt
+#         # Pass single values as strings, not lists
+#         args.image_path = image
+#         args.input_text = prompt
 
-        visual_data = model.load_test_image()
-        log_vram(f"image_{i}_loaded")
+#         visual_data = model.load_test_image()
+#         log_vram(f"image_{i}_loaded")
 
-        start_infer = time.time()
-        _, output_text = model.run(
-            args.input_text,
-            visual_data,
-            args.max_new_tokens
-        )
-        infer_time = (time.time() - start_infer) * 1000
+#         start_infer = time.time()
+#         _, output_text = model.run(
+#             args.input_text,
+#             visual_data,
+#             args.max_new_tokens
+#         )
+#         infer_time = (time.time() - start_infer) * 1000
         
-        log_vram(f"image_{i}_inferred")
+#         log_vram(f"image_{i}_inferred")
 
-        # Extract response
-        response = output_text[0] if isinstance(output_text, list) else output_text
+#         # Extract response
+#         response = output_text[0] if isinstance(output_text, list) else output_text
         
-        results.append({
-            "image": image,
-            "prompt": prompt,
-            "response": response,
-            "latency_ms": infer_time 
-        })
-        print(f"  Response: {response}")
+#         results.append({
+#             "image": image,
+#             "prompt": prompt,
+#             "response": response,
+#             "latency_ms": infer_time 
+#         })
+#         print(f"  Response: {response}")
 
-    print("-" * 50)
-    for idx, result in enumerate(results):
-        print(f"\n[{idx+1}] {result['image']}")
-        print(f"    Prompt: {result['prompt']}")
-        print(f"    Response: {result['response']}")
-        print(f"    Latency: {result['latency_ms']:.0f}ms")
+#     print("-" * 50)
+#     for idx, result in enumerate(results):
+#         print(f"\n[{idx+1}] {result['image']}")
+#         print(f"    Prompt: {result['prompt']}")
+#         print(f"    Response: {result['response']}")
+#         print(f"    Latency: {result['latency_ms']:.0f}ms")
     
-    print(f"\nProcessed {len(results)} image(s)")
-    print(f"  Avg latency: {sum(r['latency_ms'] for r in results)/len(results):.0f}ms")
-    print(f"  Model load time: {load_time:.2f}s")
+#     print(f"\nProcessed {len(results)} image(s)")
+#     print(f"  Avg latency: {sum(r['latency_ms'] for r in results)/len(results):.0f}ms")
+#     print(f"  Model load time: {load_time:.2f}s")
     
-    return results
+#     return results
 
 def main():
     builder = LlavaEngineBuilder(BUILD_CONFIG)
@@ -412,8 +412,6 @@ def main():
         builder.build()
     else:
         print("\nUsing existing engines")
-
-    results = run_inference_batched(BUILD_CONFIG, INFERENCE_CONFIG)
 
 if __name__ == "__main__":
     main()

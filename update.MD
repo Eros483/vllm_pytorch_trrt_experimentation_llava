@@ -12,7 +12,7 @@
         - next pathway  is to fuse tensors via cpu in the beginning before passing to engine and using repository's `run` function.
     
 - #### **Miscellaneous updates****
-    - For MultiModal atleast, there is a PyTorch backend being used by TensorRT and TensorRT-LLM.
-    - For any generic model, conversion to tensorRT exists by finding base model in hugging face configuration.
-        - Vast support for over so far all thinkable models.
-    - Same docker image can be used to run multiple TensorRT engines.
+    - Clarification: TensorRT does NOT have any PyTorch dependency.
+        - The previous statement was caused due to a confusion with Torch-TensorRT, which allows usage of the `compile` function in torch for tensorRT engines.
+    - If sufficient GPU memory is not free, TensorRT kills the process with an immediate `OOM` error.
+    - Latency time reported was pure inference time, timer begins with invocation of `model.run` and ends at its execution.
