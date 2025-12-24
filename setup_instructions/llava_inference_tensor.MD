@@ -16,7 +16,7 @@ mkdir -p engines
 ```
 - It is assumed that the relevant scripts are already present in `/scripts`
 
-#### **Launching Triton Container**
+#### **Launching Triton Container and engine build**
 Make sure to be present in base directory.
 ```
 docker run --rm -it --net host --shm-size=2g \
@@ -31,13 +31,149 @@ docker run --rm -it --net host --shm-size=2g \
 pip install psutil gputil tritonclient[http] pillow requests
 
 cd /workspace
-```
-
-#### **Engine build and inference**
-- The script handles engine setup, build (if needed) and inference.
-- Modify the first few lines to control parameters such as batch size, images, prompts, tokens generated, etc.
-
-```
 python3 llava_inference_tensor.py
 ```
-- metrics for inference will be saved as `/scripts/inference_metrics.jsonl`
+This concludes engine build, exit container, and return to base directory.
+
+### **Triton Inference server directed towards handling batched inference**
+````
+cd /mnt/V_1TB_531/eros483/code/tetris
+
+docker run --rm -it --net=host \
+  --shm-size=2g \
+  --ulimit memlock=-1 \
+  --ulimit stack=67108864 \
+  --gpus all \
+  -v /mnt/V_1TB_531/eros483/code/tetris/tensorrtllm_backend:/workspace/tensorrtllm_backend \
+  -v /mnt/V_1TB_531/eros483/code/tetris/engines:/engines \
+  -v /mnt/V_1TB_531/eros483/code/tetris/llava-1.5-7b-hf:/llava-1.5-7b-hf \
+  -w /workspace/tensorrtllm_backend \
+  nvcr.io/nvidia/tritonserver:24.12-trtllm-python-py3 bash
+
+rm -rf multimodal_ifb
+# Copy base inflight batcher configuration
+cp -r tensorrt_llm/triton_backend/all_models/inflight_batcher_llm/ multimodal_ifb
+
+# Add multimodal-specific configurations
+cp -r tensorrt_llm/triton_backend/all_models/multimodal/ensemble multimodal_ifb/
+cp -r tensorrt_llm/triton_backend/all_models/multimodal/multimodal_encoders multimodal_ifb/
+
+export MODEL_NAME="llava-1.5-7b-hf"
+export HF_MODEL_PATH="/llava-1.5-7b-hf"
+export ENGINE_PATH="/engines/llava1.5/llm"
+export MULTIMODAL_ENGINE_PATH="/engines/llava1.5/vision"
+export ENCODER_INPUT_FEATURES_DTYPE="TYPE_FP16"
+
+# configuring tensorRT llm backend
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/tensorrt_llm/config.pbtxt \
+  triton_backend:tensorrtllm,\
+triton_max_batch_size:4,\
+decoupled_mode:False,\
+max_beam_width:1,\
+engine_dir:${ENGINE_PATH},\
+enable_kv_cache_reuse:False,\
+batching_strategy:inflight_fused_batching,\
+max_queue_delay_microseconds:0,\
+enable_chunked_context:False,\
+encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
+logits_datatype:TYPE_FP32,\
+prompt_embedding_table_data_type:TYPE_FP16
+
+# configuring preprocessing
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/preprocessing/config.pbtxt \
+  tokenizer_dir:${HF_MODEL_PATH},\
+triton_max_batch_size:4,\
+preprocessing_instance_count:1,\
+multimodal_model_path:${MULTIMODAL_ENGINE_PATH},\
+engine_dir:${ENGINE_PATH},\
+max_num_images:1,\
+max_queue_delay_microseconds:20000
+
+# configure postprocessing
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/postprocessing/config.pbtxt \
+  tokenizer_dir:${HF_MODEL_PATH},\
+triton_max_batch_size:4,\
+postprocessing_instance_count:1
+
+# configure ensemble
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/ensemble/config.pbtxt \
+  triton_max_batch_size:4,\
+logits_datatype:TYPE_FP32
+
+# configure BLS
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/tensorrt_llm_bls/config.pbtxt \
+  triton_max_batch_size:4,\
+decoupled_mode:False,\
+bls_instance_count:1,\
+accumulate_tokens:False,\
+tensorrt_llm_model_name:tensorrt_llm,\
+multimodal_encoders_name:multimodal_encoders,\
+logits_datatype:TYPE_FP32,\
+prompt_embedding_table_data_type:TYPE_FP16
+
+# configure multimodal encoders
+python3 tensorrt_llm/triton_backend/tools/fill_template.py \
+  -i multimodal_ifb/multimodal_encoders/config.pbtxt \
+  triton_max_batch_size:4,\
+multimodal_model_path:${MULTIMODAL_ENGINE_PATH},\
+encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
+hf_model_path:${HF_MODEL_PATH},\
+max_queue_delay_microseconds:20000,\
+prompt_embedding_table_data_type:TYPE_FP16
+
+# launching server
+python3 tensorrt_llm/triton_backend/scripts/launch_triton_server.py \
+  --world_size 1 \
+  --model_repo=multimodal_ifb/ \
+  --tensorrt_llm_model_name tensorrt_llm,multimodal_encoders \
+  --multimodal_gpu0_cuda_mem_pool_bytes 2000000000
+
+- Note: `MPI_Init_thread` issues -> `export PMIX_MCA_gds=hash`
+````
+
+### **Inference commands**
+```
+Single Request
+python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+  --text 'Describe this image in detail.' \
+  --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
+  --request-output-len 50 \
+  --model_type llava
+
+Streaming mode
+python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+  --text 'Describe this image in detail.' \
+  --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
+  --request-output-len 50 \
+  --model_type llava \
+  --streaming
+
+BLS Model
+python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+  --text 'Describe this image in detail.' \
+  --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
+  --request-output-len 50 \
+  --model_type llava \
+  --use_bls
+
+cURL requests
+curl -X POST localhost:8000/v2/models/ensemble/generate_stream \
+  -d '{
+    "id": "1",
+    "text_input": "Describe this image in detail.",
+    "image_url_input": "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png",
+    "parameters": {
+      "max_tokens": 50,
+      "beam_width": 1,
+      "stream": false
+    }
+  }'
+```
+
+- Server metrics: `curl localhost:8002/metrics`
+- shutdown `pkill tritonserver`
