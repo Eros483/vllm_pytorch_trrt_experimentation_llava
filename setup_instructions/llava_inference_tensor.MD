@@ -36,6 +36,7 @@ python3 llava_inference_tensor.py
 This concludes engine build, exit container, and return to base directory.
 
 ### **Triton Inference server directed towards handling batched inference**
+- Enter configuration
 ````
 cd /mnt/V_1TB_531/eros483/code/tetris
 
@@ -49,7 +50,9 @@ docker run --rm -it --net=host \
   -v /mnt/V_1TB_531/eros483/code/tetris/llava-1.5-7b-hf:/llava-1.5-7b-hf \
   -w /workspace/tensorrtllm_backend \
   nvcr.io/nvidia/tritonserver:24.12-trtllm-python-py3 bash
-
+````
+- Edit files
+```
 rm -rf multimodal_ifb
 # Copy base inflight batcher configuration
 cp -r tensorrt_llm/triton_backend/all_models/inflight_batcher_llm/ multimodal_ifb
@@ -125,43 +128,102 @@ encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
 hf_model_path:${HF_MODEL_PATH},\
 max_queue_delay_microseconds:20000,\
 prompt_embedding_table_data_type:TYPE_FP16
+```
+- **Further specific code edits**
+  - **For multimodal_encoders**
+  ```
+  # From inside the docker container
+  cd /workspace/tensorrtllm_backend/multimodal_ifb/multimodal_encoders/1/
+  nano model.py
 
-# launching server
+  # ------ FIRST FIX ------
+  # change from `self.max_batch_size = model_config['max_batch_size']`
+
+  if 'max_batch_size' in model_config:
+      self.max_batch_size = model_config['max_batch_size']
+  elif 'maxBatchSize' in model_config:
+      self.max_batch_size = model_config['maxBatchSize']
+  else:
+      # Fallback to reading from parameters or default
+      self.max_batch_size = int(model_config.get('parameters', {}).get('max_batch_size', {}).get('string_value', '4'))
+
+  # ------ SECOND FIX -----
+  # change from 
+  # self.vision_max_batch_size = visual_config['builder_config']['max_batch_size']
+
+  # Replace with:
+  self.vision_max_batch_size = visual_config.get('builder_config', {}).get('max_batch_size', self.max_batch_size)
+
+  # ----- THIRD FIX -----
+  # change from
+  # embeddings.append(vit_output_batch['encoder_output'].to(self.vision_output_dtype))
+  # TRY EVERYTHING THAT MIGHT WORK
+  print(f"DEBUG: Available output keys: {list(vit_output_batch.keys())}")
+  print(f"DEBUG: Output shapes: {[(k, v.shape) for k, v in vit_output_batch.items()]}")
+
+  # Try multiple possible key names
+  if 'encoder_output' in vit_output_batch:
+      embeddings.append(vit_output_batch['encoder_output'].to(self.vision_output_dtype))
+  elif 'output' in vit_output_batch:
+      embeddings.append(vit_output_batch['output'].to(self.vision_output_dtype))
+  else:
+      # Fallback: use whatever key exists (assumes only one output)
+      output_key = list(vit_output_batch.keys())[0]
+      print(f"DEBUG: Using output key: {output_key}")
+      embeddings.append(vit_output_batch[output_key].to(self.vision_output_dtype))
+  ```
+
+- Launching server
+```
+export PMIX_MCA_gds=hash
+
 python3 tensorrt_llm/triton_backend/scripts/launch_triton_server.py \
   --world_size 1 \
   --model_repo=multimodal_ifb/ \
   --tensorrt_llm_model_name tensorrt_llm,multimodal_encoders \
   --multimodal_gpu0_cuda_mem_pool_bytes 2000000000
-
-- Note: `MPI_Init_thread` issues -> `export PMIX_MCA_gds=hash`
 ````
 
 ### **Inference commands**
+- **Setup for requesting inside container**
 ```
-Single Request
-python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+# replace with your own docker container id using docker ps
+docker exec -it e6ea3c587db5 bash
+pip3 install tritonclient[all]
+pip install tabulate
+```
+
+- Single Request
+```
+python3 tensorrt_llm/triton_backend/tools/multimodal/client.py \
   --text 'Describe this image in detail.' \
   --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
   --request-output-len 50 \
   --model_type llava
+```
 
-Streaming mode
-python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+- Streaming mode
+```
+python3 tensorrt_llm/triton_backend/tools/multimodal/client.py \
   --text 'Describe this image in detail.' \
   --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
   --request-output-len 50 \
   --model_type llava \
   --streaming
+```
 
-BLS Model
-python tensorrt_llm/triton_backend/tools/multimodal/client.py \
+- BLS Model
+```
+python3 tensorrt_llm/triton_backend/tools/multimodal/client.py \
   --text 'Describe this image in detail.' \
   --image 'https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png' \
   --request-output-len 50 \
   --model_type llava \
   --use_bls
+```
 
-cURL requests
+- cURL requests
+```
 curl -X POST localhost:8000/v2/models/ensemble/generate_stream \
   -d '{
     "id": "1",
