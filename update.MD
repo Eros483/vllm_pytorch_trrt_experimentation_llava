@@ -1,18 +1,26 @@
-### **Update Dec-23 on discussed objectives**
-- #### **TensorRT setup failure for batched inference**
-    - Current setup fails to handle batched requests.
-    - Seems the flaw is in the repository's code itself.
-    - Sources referred to, in attempt to find solution:
-        - https://docs.nvidia.com/dynamo/dev/multimodal/trtllm.html
-        - https://github.com/NVIDIA/TensorRT-LLM
-    - Found a single Github issue that references a similiar problem
-        - https://github.com/NVIDIA/TensorRT-LLM/issues/1227
-    - Current setup only works for one batch at a time, i.e. sequential responses.
-        - Attempts at introducing batched inference failed.
-        - next pathway  is to fuse tensors via cpu in the beginning before passing to engine and using repository's `run` function.
+### **Update Dec-27 on discussed objectives**
+- #### **Triton Server Batched Results observation**
+    - Setup has configurable MAX_BATCH_SIZE for Engine Build, Inference Client server, and Inference Request
+        - Assume that for below observations MAX_BATCH_SIZE for engine and client was typically kept the same.
+            - Only batch size of inference request was altered.
     
-- #### **Miscellaneous updates****
-    - Clarification: TensorRT does NOT have any PyTorch dependency.
-        - The previous statement was caused due to a confusion with Torch-TensorRT, which allows usage of the `compile` function in torch for tensorRT engines.
-    - If sufficient GPU memory is not free, TensorRT kills the process with an immediate `OOM` error.
-    - Latency time reported was pure inference time, timer begins with invocation of `model.run` and ends at its execution.
+    - Succesfully have tested
+        - reliable engine build script @ `scripts/llava_inference_tensor.py`
+        - reliable script for engine build and inference requests @ `setup_instructions/llava_inference_tensor.MD`
+        - reliable script for batch query execution @ `scripts/test_triton_server.py`
+
+    - Observations
+        - With variations of max_batch_size for engine build (ex: 1, 4, 8, 12, 50), max vram consumed in engine build remained same at ~35 gigabytes, taking roughly 90 seconds for dual engine builds.
+
+        - Inference requests for different number of batches yielded negligible increase in VRAM consumption.
+
+        - As number of tokens consumed increased, GPU utilization simply remained at 100% for longer.
+
+        - As observable from logs, never was any actual batching of batch size>9 actually observed.
+            - Investigations simply point towards efficiency, and no other cause has been identifiable so far.
+
+        - Investigation was also carried out with inflight batching with a max queue delay of 20ms.
+            - Led to no identifiable changes, despite being able to observe the delay actually occuring.
+
+- #### **Future Steps**
+    - Requires guidance from lead, no thoughts on how to proceed ahead currently.

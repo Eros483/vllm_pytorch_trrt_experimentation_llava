@@ -74,6 +74,7 @@ export ENGINE_PATH="/engines/llava1.5/llm"
 export MULTIMODAL_ENGINE_PATH="/engines/llava1.5/vision"
 export ENCODER_INPUT_FEATURES_DTYPE="TYPE_FP16"
 export MAX_BATCH_SIZE=4
+export MAX_QUEUE_DELAY=20000
 
 # configuring tensorRT llm backend
 python3 tensorrt_llm/triton_backend/tools/fill_template.py \
@@ -85,7 +86,7 @@ max_beam_width:1,\
 engine_dir:${ENGINE_PATH},\
 enable_kv_cache_reuse:False,\
 batching_strategy:inflight_fused_batching,\
-max_queue_delay_microseconds:0,\
+max_queue_delay_microseconds:${MAX_QUEUE_DELAY},\
 enable_chunked_context:False,\
 encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
 logits_datatype:TYPE_FP32,\
@@ -100,7 +101,7 @@ preprocessing_instance_count:1,\
 multimodal_model_path:${MULTIMODAL_ENGINE_PATH},\
 engine_dir:${ENGINE_PATH},\
 max_num_images:1,\
-max_queue_delay_microseconds:20000
+max_queue_delay_microseconds:${MAX_QUEUE_DELAY}
 
 # configure postprocessing
 python3 tensorrt_llm/triton_backend/tools/fill_template.py \
@@ -134,7 +135,7 @@ python3 tensorrt_llm/triton_backend/tools/fill_template.py \
 multimodal_model_path:${MULTIMODAL_ENGINE_PATH},\
 encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
 hf_model_path:${HF_MODEL_PATH},\
-max_queue_delay_microseconds:20000,\
+max_queue_delay_microseconds:${MAX_QUEUE_DELAY},\
 prompt_embedding_table_data_type:TYPE_FP16
 ```
 - **Further specific code edits**
