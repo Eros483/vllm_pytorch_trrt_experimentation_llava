@@ -3,3 +3,5 @@ matplotlib
 accelerate
 pandas
 scikit-learn
+vllm
+gputils

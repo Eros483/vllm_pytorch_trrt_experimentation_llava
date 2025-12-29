@@ -1,26 +1,15 @@
-### **Update Dec-27 on discussed objectives**
-- #### **Triton Server Batched Results observation**
-    - Setup has configurable MAX_BATCH_SIZE for Engine Build, Inference Client server, and Inference Request
-        - Assume that for below observations MAX_BATCH_SIZE for engine and client was typically kept the same.
-            - Only batch size of inference request was altered.
+### **Update Dec-29 on discussed objectives**
+- #### **vLLM Inference pipeline**
+    - Tested vLLM inference pipeline, kindly refer to script @ `notebooks/vllm_inference.ipynb`.
+    - Pro's vs PyTorch
+        - Constant memory usage, easily predictable.
+        - PyTorch was able to handle a maximum of 62 batched requests vs vLLM having handled a batch of 1000 requests so far, without any issues, with plenty of vRAM available.
+        - supports out-of-the-box InFlight batching, mimicking production-grade required form of batching.
     
-    - Succesfully have tested
-        - reliable engine build script @ `scripts/llava_inference_tensor.py`
-        - reliable script for engine build and inference requests @ `setup_instructions/llava_inference_tensor.MD`
-        - reliable script for batch query execution @ `scripts/test_triton_server.py`
-
-    - Observations
-        - With variations of max_batch_size for engine build (ex: 1, 4, 8, 12, 50), max vram consumed in engine build remained same at ~35 gigabytes, taking roughly 90 seconds for dual engine builds.
-
-        - Inference requests for different number of batches yielded negligible increase in VRAM consumption.
-
-        - As number of tokens consumed increased, GPU utilization simply remained at 100% for longer.
-
-        - As observable from logs, never was any actual batching of batch size>9 actually observed.
-            - Investigations simply point towards efficiency, and no other cause has been identifiable so far.
-
-        - Investigation was also carried out with inflight batching with a max queue delay of 20ms.
-            - Led to no identifiable changes, despite being able to observe the delay actually occuring.
-
+    - Pro's vs TensorRT
+        - Signfiicantly easier process of usage and inference.
+        - Allows for much faster prototyping, testing and benchmarking inference latency and vRAM usage.
+    
 - #### **Future Steps**
-    - Requires guidance from lead, no thoughts on how to proceed ahead currently.
+    - Test inflight batching as provided by vLLM.
+    - study techniques used by vLLM for providing efficient inference.
