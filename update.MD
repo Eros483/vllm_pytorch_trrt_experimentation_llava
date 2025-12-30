@@ -19,7 +19,7 @@
 
 - #### **TensorRT not scaling with batch size**
     - Similiar to vLLM, tensorRT's vram allocation is determined as 90% of available vRAM and not actually as something such as batch size, etc.
-    - Can be manually configured utilizing fill_template.py while configuring the llm portion of the multimodal setup.
+    - Can be [manually configured](https://github.com/NVIDIA/TensorRT-LLM/issues/401) utilizing fill_template.py while configuring the llm portion of the multimodal setup.
     
     ```
     # configuring tensorRT llm backend
