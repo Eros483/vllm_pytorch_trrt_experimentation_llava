@@ -90,7 +90,8 @@ max_queue_delay_microseconds:${MAX_QUEUE_DELAY},\
 enable_chunked_context:False,\
 encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
 logits_datatype:TYPE_FP32,\
-prompt_embedding_table_data_type:TYPE_FP16
+prompt_embedding_table_data_type:TYPE_FP16, \
+kv_cache_free_gpu_mem_fraction:0.4
 
 # configuring preprocessing
 python3 tensorrt_llm/triton_backend/tools/fill_template.py \
