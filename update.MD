@@ -1,41 +1,18 @@
-### **Update Dec-30 on discussed objectives**
-- #### **vLLM support for diffusion-based and convolution-based models**
-  - vLLM-omni supports diffusion-based models on a limited basis.
-    - Very recent framework.
-    - Reliant on hugging face's diffusers, and major manual configuration by user.
+## **Update Dec-31 on discussed objectives**
+- ### **vLLM scheduler**
+  - Offers two scheduling options (source code is available):
+    - First come first served.
+    - Priority based queueing.
   
-  - For convolution-based models:
-    - no vLLM spin-off for the same.
-    - `TensorRT` and `ONNX runtime` are the current methods of speeding up convolution based models.
+  - In a priority based queuing system, if requests have the same priority, then whichever request came first is received, if it can be processed.
+    - Even if requests are sent at the same time in a batch, the order in which they're sequenced gives them an ordering at a  lower level, which is utilised.
 
-- #### **vLLM architectural decisions for efficiency**
-    - Utilizes [Paged Attention](https://medium.com/cj-express-tech-tildi/how-does-vllm-optimize-the-llm-serving-system-d3713009fb73)
-    - Utilizes [Continuous Batching and Optimized kernels for hardware](https://www.redhat.com/en/blog/meet-vllm-faster-more-efficient-llm-inference-and-serving)
-    - vLLM Engine is quite efficient and fast in terms of initialisation:
-        - Creates engine configurations for model and cache.
-        - Enables chunked prefill.
-        - Profiles token size and available memory,
-        - Caches compiled graph from previous runs, for quicker starts. ---> primary reason for why engine spin up was so quick.
-
-- #### **TensorRT not scaling with batch size**
-    - Similiar to vLLM, tensorRT's vram allocation is determined as 90% of available vRAM and not actually as something such as batch size, etc.
-    - Can be [manually configured](https://github.com/NVIDIA/TensorRT-LLM/issues/401) utilizing fill_template.py while configuring the llm portion of the multimodal setup.
-    
-    ```
-    # configuring tensorRT llm backend
-    python3 tensorrt_llm/triton_backend/tools/fill_template.py \
-      -i multimodal_ifb/tensorrt_llm/config.pbtxt \
-      triton_backend:tensorrtllm,\
-    triton_max_batch_size:${MAX_BATCH_SIZE},\
-    decoupled_mode:False,\
-    max_beam_width:1,\
-    engine_dir:${ENGINE_PATH},\
-    enable_kv_cache_reuse:False,\
-    batching_strategy:inflight_fused_batching,\
-    max_queue_delay_microseconds:${MAX_QUEUE_DELAY},\
-    enable_chunked_context:False,\
-    encoder_input_features_data_type:${ENCODER_INPUT_FEATURES_DTYPE},\
-    logits_datatype:TYPE_FP32,\
-    prompt_embedding_table_data_type:TYPE_FP16, \
-    kv_cache_free_gpu_mem_fraction:0.4
-    ```
+- ### **ONNX Constraints  for inference speedup**
+  - Primarily investigating conversion of Llava models and Stable diffusion.
+  - Supports convolution based models entirely.
+  - Diffusion models are a blend of python code and ONNX optimization.
+    - ONNX individually requires exporting each component invidividually, providing optimized versions.
+    - Post that, they still need to run via python in loops and the denoising scheduler logic stays in python as well.
+      - TensorRT works similiarly as well, so component level optimizations seem to be the standard.
+  
+  - While ONNX does support all GPU architectures, the support for Nvidia is the best, followed closely by Apple's CoreML provider. AMD is supported via rocM but is less mature and optimizations vary greatly with GPU generation.
